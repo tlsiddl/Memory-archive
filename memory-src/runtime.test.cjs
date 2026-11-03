@@ -35,7 +35,8 @@ function environment(){
    if(inputBody.stage){
     flags.stageCalls=(flags.stageCalls||[]).concat(inputBody.stage);if(inputBody.stage==='원문 누락 보완')flags.lastRepairInput=inputBody;if(inputBody.stage==='상세 기억 추출'){flags.extractDialogue=inputBody.dialogueCandidates;flags.extractionInputs=(flags.extractionInputs||[]).concat([inputBody]);}if(inputBody.stage==='원문 대조'){flags.reviewInputs=(flags.reviewInputs||[]).concat([inputBody]);flags.reviewDialogue=inputBody.dialogueCandidates;flags.reviewSections=inputBody.sourceSections;flags.reviewContextInputs=(flags.reviewContextInputs||[]).concat([inputBody.contextBefore]);}
     if(flags.editDuringRecollection&&inputBody.stage==='챕터 흐름 재검토')flags.rangeMessages[0].content+=' [대조 중 수정]';if(flags.failStage===inputBody.stage)return Response.json({error:'stage interruption'},{status:500});
-    if(inputBody.stage==='서술 원문 발췌'){flags.narrationInputs=(flags.narrationInputs||[]).concat([inputBody]);const m=inputBody.newMessages.find(x=>x.content.includes('촬영장에 도착했다.'));const ev=inputBody.events.find(x=>x.sourceIds.includes(m?.id));data={excerpts:m?[{sourceId:m.id,eventRef:ev?.ref||'',text:'촬영장 도착',quote:'촬영장에 도착했다.',people:['서재헌']}]:[]};}
+    if(inputBody.stage==='선택한 글 정리'){flags.selectedInput=inputBody;data={title:'촬영장 도착',summary:'재헌이 촬영장에 도착했다.',people:['서재헌']};}
+    else if(inputBody.stage==='서술 원문 발췌'){flags.narrationInputs=(flags.narrationInputs||[]).concat([inputBody]);const m=inputBody.newMessages.find(x=>x.content.includes('촬영장에 도착했다.'));const ev=inputBody.events.find(x=>x.sourceIds.includes(m?.id));data={excerpts:m?[{sourceId:m.id,eventRef:ev?.ref||'',text:'촬영장 도착',quote:'촬영장에 도착했다.',people:['서재헌']}]:[]};}
     else if(inputBody.stage==='발언·사건 대조'){flags.dialogueReviewInputs=(flags.dialogueReviewInputs||[]).concat([inputBody]);if(flags.dialogueReviewResponse)data=flags.dialogueReviewResponse(inputBody);else data={dialogues:inputBody.dialogueCandidates.map(c=>{const event=inputBody.events.find(e=>e.sourceIds?.includes(c.sourceId))||inputBody.events[0],proof=inputBody.sourceSections.find(p=>p.sourceId===c.sourceId),eventProof=inputBody.sourceSections.find(p=>event.sourceIds?.includes(p.sourceId));return {eventNumber:event.eventNumber,quote:c.quote,speaker:c.speaker||'한서래',recipient:c.speaker==='서재헌'?'한서래':'서재헌',channel:c.channel==='unknown'?'spoken':c.channel,text:'실제 질문과 응답의 전체 내용을 보존했다.',linkReason:'이 사건의 질문에 대한 응답',sourceSegmentNumbers:inputBody.sourceSections.filter(p=>p.sourceId===c.sourceId).map(p=>p.segmentNumber),eventSourceSegmentNumbers:[eventProof.segmentNumber]};}),omittedDialogues:[]};}
     else if(inputBody.stage==='발언 사건 근거 선택'){flags.dialogueBindingInputs=(flags.dialogueBindingInputs||[]).concat([inputBody]);data=flags.dialogueBindingResponse?flags.dialogueBindingResponse(inputBody):{bindings:[]};}
     else if(inputBody.stage==='과거 기억 참조 재대조'){flags.referenceRepairInputs=(flags.referenceRepairInputs||[]).concat([inputBody]);if(flags.referenceRepairFails)return Response.json({error:'reference selection interruption'},{status:500});data={selectedRecordNumbers:flags.referenceRepairBad?[inputBody.previousMemories.length+1]:inputBody.previousMemories.filter((r,i)=>r.id===flags.referenceTarget||flags.referenceFirst&&i===0).map(r=>r.recordNumber)};}
@@ -117,7 +118,7 @@ function environment(){
   marinara:{storage:{get:async()=>structuredClone(bag),patch:async data=>{if(flags.storageFail)throw Error('save failure');Object.assign(bag,structuredClone(data));return {ok:true};}},onCleanup(fn){ctx.cleanup=fn;}},confirm:()=>true,prompt:()=>null};
  ctx.window=ctx;ctx.globalThis=ctx;vm.createContext(ctx);
  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'core.cjs'),'utf8'),ctx);
- const runtime=fs.readFileSync(require('node:path').join(__dirname,'runtime.js'),'utf8').replace('host.onCleanup?.(cleanup);','globalThis.testing={refresh,handle,read,write,pack,unpack,embed,loadIndex,buildIndex,collect,messages,loadActiveSummaries,readRange,summarizeRange,action,render,chatStats,model,autoResolveQuotes,api,compactIndex,expandIndex,packIndex,optimizeStorage,loadStorageUsage,rateRetry,retryDelay,requestGate,observeRate,attachClocks,organizeDetailed,qualityStage,detailedCandidate,numberedPastReferences,pastMemoryIndex,historicalReviewContext,prepareReviewContext,bindDialogueEventEvidence,getDiagnostic:()=>lastExtractionDiagnostic,getCopyState:()=>({status,text:diagnosticCopyText})}; host.onCleanup?.(cleanup);');
+ const runtime=fs.readFileSync(require('node:path').join(__dirname,'runtime.js'),'utf8').replace('host.onCleanup?.(cleanup);','globalThis.testing={saveSelectedChat,selectedChatParts,refresh,handle,read,write,pack,unpack,embed,loadIndex,buildIndex,collect,messages,loadActiveSummaries,readRange,summarizeRange,action,render,chatStats,model,autoResolveQuotes,api,compactIndex,expandIndex,packIndex,optimizeStorage,loadStorageUsage,rateRetry,retryDelay,requestGate,observeRate,attachClocks,organizeDetailed,qualityStage,detailedCandidate,numberedPastReferences,pastMemoryIndex,historicalReviewContext,prepareReviewContext,bindDialogueEventEvidence,getDiagnostic:()=>lastExtractionDiagnostic,getCopyState:()=>({status,text:diagnosticCopyText})}; host.onCleanup?.(cleanup);');
  vm.runInContext(runtime,ctx);
  return {ctx,bag,sent,flags,nodes,embeddingCalls};
 }
@@ -727,4 +728,24 @@ test('expanded NPC and both quote modes reach model and store verified narration
  await ctx.testing.refresh();await ctx.testing.handle('fullRun');const d=await ctx.testing.read('room1');
  assert(flags.modelSystems.some(x=>x.includes('[주변 인물 자세히]')));assert.equal(flags.narrationInputs.length,1);
  const q=d.records.find(x=>x.kind==='narration_excerpt');assert(q);assert.equal(q.quote,'촬영장에 도착했다.');assert(q.quoteVerified);assert(d.records.some(x=>x.id===q.eventId&&x.kind==='event'),JSON.stringify({q,events:flags.narrationInputs[0].events,records:d.records}));ctx.cleanup();
+});
+
+
+test('selected passage is summarized and saved only for its originating room, without marking the message collected',async()=>{
+ const {ctx,flags}=environment();await ctx.testing.refresh();const part={sourceId:'a1',text:'촬영장에 도착했다.'};
+ const saved=await ctx.testing.saveSelectedChat({chatId:'room1',parts:[part]});const d=await ctx.testing.read('room1');
+ assert.equal(saved.duplicate,false);assert.deepEqual(JSON.parse(JSON.stringify(flags.selectedInput.selectedParts)),[part]);assert.equal(d.processed.a1,undefined);
+ assert(d.records.some(r=>r.id===saved.id&&r.text.includes('촬영장')));assert(d.records.some(r=>r.kind==='selected_excerpt'&&r.quote===part.text&&r.eventId===saved.id));
+ const again=await ctx.testing.saveSelectedChat({chatId:'room1',parts:[part]});assert.equal(again.duplicate,true);
+ await assert.rejects(ctx.testing.saveSelectedChat({chatId:'room1',parts:[{...part,text:'가짜 구절'}]}),/일치하지/);ctx.cleanup();
+});
+
+test('drag selection accepts only chat messages and keeps each selected message part',()=>{
+ const {ctx}=environment();
+ const a={dataset:{messageId:'a'},text:'첫 번째'},b={dataset:{messageId:'b'},text:'두 번째'};
+ const an={nodeType:3,parentElement:{closest:()=>a}},bn={nodeType:3,parentElement:{closest:()=>b}};
+ const range={startContainer:an,endContainer:bn,startOffset:0,endOffset:4,intersectsNode:()=>true,cloneRange(){return {selectNodeContents(el){this.el=el;},setStart(){},setEnd(){},toString(){return this.el.text;}};}};
+ ctx.document.querySelectorAll=()=>[a,b];const got=ctx.testing.selectedChatParts({isCollapsed:false,rangeCount:1,getRangeAt:()=>range});
+ assert.equal(got.chatId,'room1');assert.deepEqual(JSON.parse(JSON.stringify(got.parts)),[{sourceId:'a',text:'첫 번째'},{sourceId:'b',text:'두 번째'}]);
+ bn.parentElement.closest=()=>null;assert.equal(ctx.testing.selectedChatParts({isCollapsed:false,rangeCount:1,getRangeAt:()=>range}),null);ctx.cleanup();
 });

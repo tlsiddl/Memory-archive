@@ -811,3 +811,13 @@ test('narration excerpts require exact source, stay distinct from speech, and ar
   assert.throws(()=>C.addNarrationExcerpts(d,[{...row,eventRef:'bad'}],[m],{}));
   C.markEdits(d,[{...m,content:'내용이 바뀌었다'}]);assert.equal(x.stale,true);
 });
+
+test('selected passages are verified, stored separately and linked without changing processed state',()=>{
+ const d=C.empty(),ms=[{id:'m1',content:'비서가 문을 열었다.',rowid:1},{id:'m2',content:'"어서 오세요." 서래가 웃었다.',rowid:2}],parts=[{sourceId:'m1',text:'비서가 문을 열었다.'},{sourceId:'m2',text:'서래가 웃었다.'}];
+ const result=C.addSelectedMemory(d,parts,ms,{title:'방문',summary:'비서가 문을 열자 서래가 웃었다.',people:['서래']});
+ assert.equal(d.records.length,3);assert.equal(d.records.filter(r=>r.kind==='selected_excerpt').length,2);assert.deepEqual(d.processed,{});
+ assert(d.records.filter(r=>r.kind==='selected_excerpt').every(r=>r.eventId===result.id&&r.quoteVerified));
+ assert(C.injection(d,[d.records.find(r=>r.id===result.id)]).text.includes('selected_excerpt'));
+ assert.equal(C.addSelectedMemory(d,parts,ms,{title:'방문',summary:'방문했다.'}).duplicate,true);
+ const before=JSON.stringify(d);assert.throws(()=>C.addSelectedMemory(d,[{sourceId:'m1',text:'없는 구절'}],ms,{title:'가짜',summary:'가짜'}));assert.equal(JSON.stringify(d),before);
+});
