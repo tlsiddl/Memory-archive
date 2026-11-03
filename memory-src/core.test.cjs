@@ -796,3 +796,18 @@ test('v01020 old checkpoint with a staff quote using the short reply ID is recov
 test('v01020 verified speaker guard preserves explicit alias matches and unverified draft speaker correction',()=>{
  const x=sharedSpeakerFixture1020();x.base.memories.push({ref:'draft',kind:'quote',speaker:'서재헌',channel:'spoken',quote:phoneQuote1017,text:'잘못된 초안 화자',sourceIds:[x.id],eventRef:'event'});const corrected=C.mergeDialogueReview(x.base,{dialogues:[x.rows[56]]},x.messages,[],C.empty(),isolatedDialogueOptions1016);assert.equal(corrected.memories.find(q=>q.ref==='draft').speaker,'직원');const d=C.empty();C.setIdentity(d,'서재헌',['재헌'],true);const next=C.mergeDialogueReview(corrected,{dialogues:[{...x.rows[48],speaker:'재헌'}]},x.messages,[],d,isolatedDialogueOptions1016);assert(next.memories.some(q=>q.kind==='quote'&&q.quote==='네.'&&q.speaker==='재헌'));assert.equal(next.memories.find(q=>q.quote===phoneQuote1017).speaker,'직원');
 });
+
+test('narration excerpts require exact source, stay distinct from speech, and are searchable and injected',()=>{
+  const d=C.empty(),m={id:'m1',role:'assistant',rowid:1,content:'비서는 문을 닫고 조용히 물러났다. "알겠습니다."'};
+  const ep=C.createEpisode(d,'방문','ep');ep.sourceIds=['m1'];d.currentEpisodeId=ep.id;
+  d.records.push({id:'ev',kind:'event',episodeId:'ep',text:'비서가 문을 닫고 물러났다',sourceIds:['m1']});
+  const row={sourceId:'m1',eventRef:'e',text:'비서가 자리를 떠나는 모습',quote:'비서는 문을 닫고 조용히 물러났다.',people:['비서']};
+  assert.equal(C.addNarrationExcerpts(d,[row],[m],{e:'ev'}),1);
+  const x=d.records.find(r=>r.kind==='narration_excerpt');assert.equal(x.eventId,'ev');assert.equal(x.quoteVerified,true);assert.equal(C.hasQuote(x),false);
+  assert(C.candidates(d,'비서는 조용히 물러났다').some(v=>v.r.id===x.id));
+  d.settings.storyOn=false;d.settings.episodeOn=false;assert(C.injection(d,[x]).text.includes('narration_excerpt'));
+  assert.equal(C.addNarrationExcerpts(d,[row],[m],{e:'ev'}),0);
+  const old=JSON.stringify(d.records);assert.throws(()=>C.addNarrationExcerpts(d,[{...row,quote:'없는 문장'}],[m],{e:'ev'}));assert.equal(JSON.stringify(d.records),old);
+  assert.throws(()=>C.addNarrationExcerpts(d,[{...row,eventRef:'bad'}],[m],{}));
+  C.markEdits(d,[{...m,content:'내용이 바뀌었다'}]);assert.equal(x.stale,true);
+});
